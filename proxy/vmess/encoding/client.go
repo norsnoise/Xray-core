@@ -13,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/common/bitmask"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/crypto"
+	"github.com/xtls/xray-core/common/crypto/waes256"
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/drain"
 	"github.com/xtls/xray-core/common/errors"
@@ -171,6 +172,28 @@ func (c *ClientSession) EncodeRequestBody(request *protocol.RequestHeader, write
 			sizeParser = NewAEADSizeParser(lengthAuth)
 		}
 		return crypto.NewAuthenticationWriter(auth, sizeParser, writer, request.Command.TransferType(), padding), nil
+	case protocol.SecurityType_WAES256:
+		aead, err := waes256.NewCascadeAEAD(GenerateChacha20Poly1305Key(c.requestBodyKey[:]))
+		common.Must(err)
+
+		auth := &crypto.AEADAuthenticator{
+			AEAD:                    aead,
+			NonceGenerator:          GenerateChunkNonce(c.requestBodyIV[:], uint32(aead.NonceSize())),
+			AdditionalDataGenerator: crypto.GenerateEmptyBytes(),
+		}
+		if request.Option.Has(protocol.RequestOptionAuthenticatedLength) {
+			AuthenticatedLengthKey := vmessaead.KDF16(c.requestBodyKey[:], "auth_len")
+			AuthenticatedLengthKeyAEAD, err := waes256.NewCascadeAEAD(GenerateChacha20Poly1305Key(AuthenticatedLengthKey))
+			common.Must(err)
+
+			lengthAuth := &crypto.AEADAuthenticator{
+				AEAD:                    AuthenticatedLengthKeyAEAD,
+				NonceGenerator:          GenerateChunkNonce(c.requestBodyIV[:], uint32(aead.NonceSize())),
+				AdditionalDataGenerator: crypto.GenerateEmptyBytes(),
+			}
+			sizeParser = NewAEADSizeParser(lengthAuth)
+		}
+		return crypto.NewAuthenticationWriter(auth, sizeParser, writer, request.Command.TransferType(), padding), nil
 	default:
 		return nil, errors.New("invalid option: Security")
 	}
@@ -314,6 +337,28 @@ func (c *ClientSession) DecodeResponseBody(request *protocol.RequestHeader, read
 		if request.Option.Has(protocol.RequestOptionAuthenticatedLength) {
 			AuthenticatedLengthKey := vmessaead.KDF16(c.requestBodyKey[:], "auth_len")
 			AuthenticatedLengthKeyAEAD, err := chacha20poly1305.New(GenerateChacha20Poly1305Key(AuthenticatedLengthKey))
+			common.Must(err)
+
+			lengthAuth := &crypto.AEADAuthenticator{
+				AEAD:                    AuthenticatedLengthKeyAEAD,
+				NonceGenerator:          GenerateChunkNonce(c.requestBodyIV[:], uint32(aead.NonceSize())),
+				AdditionalDataGenerator: crypto.GenerateEmptyBytes(),
+			}
+			sizeParser = NewAEADSizeParser(lengthAuth)
+		}
+		return crypto.NewAuthenticationReader(auth, sizeParser, reader, request.Command.TransferType(), padding), nil
+	case protocol.SecurityType_WAES256:
+		aead, err := waes256.NewCascadeAEAD(GenerateChacha20Poly1305Key(c.responseBodyKey[:]))
+		common.Must(err)
+
+		auth := &crypto.AEADAuthenticator{
+			AEAD:                    aead,
+			NonceGenerator:          GenerateChunkNonce(c.responseBodyIV[:], uint32(aead.NonceSize())),
+			AdditionalDataGenerator: crypto.GenerateEmptyBytes(),
+		}
+		if request.Option.Has(protocol.RequestOptionAuthenticatedLength) {
+			AuthenticatedLengthKey := vmessaead.KDF16(c.requestBodyKey[:], "auth_len")
+			AuthenticatedLengthKeyAEAD, err := waes256.NewCascadeAEAD(GenerateChacha20Poly1305Key(AuthenticatedLengthKey))
 			common.Must(err)
 
 			lengthAuth := &crypto.AEADAuthenticator{

@@ -149,6 +149,14 @@ func (s *Server) Network() []net.Network {
 func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	iConn := stat.TryUnwrapStatsConn(conn)
 
+	// Experimental opt-in WAES-256 cascade inner layer: if any user enables it,
+	// the whole stream is decrypted before Trojan parsing. Not combined with
+	// fallbacks (a non-matching client is dropped, not forwarded to a decoy).
+	streamConn := net.Conn(conn)
+	if waesCandidates := s.validator.EncryptionCandidates(); len(waesCandidates) > 0 {
+		streamConn = NewServerCryptoConn(conn, waesCandidates)
+	}
+
 	sessionPolicy := s.policyManager.ForLevel(0)
 	if err := conn.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
 		return errors.New("unable to set read deadline").Base(err).AtWarning()
@@ -156,14 +164,14 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 
 	first := buf.FromBytes(make([]byte, buf.Size))
 	first.Clear()
-	firstLen, err := first.ReadFrom(conn)
+	firstLen, err := first.ReadFrom(streamConn)
 	if err != nil {
 		return errors.New("failed to read first request").Base(err)
 	}
 	errors.LogInfo(ctx, "firstLen = ", firstLen)
 
 	bufferedReader := &buf.BufferedReader{
-		Reader: buf.NewReader(conn),
+		Reader: buf.NewReader(streamConn),
 		Buffer: buf.MultiBuffer{first},
 	}
 
@@ -229,7 +237,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	sessionPolicy = s.policyManager.ForLevel(user.Level)
 
 	if destination.Network == net.Network_UDP { // handle udp request
-		return s.handleUDPPayload(ctx, sessionPolicy, &PacketReader{Reader: clientReader}, &PacketWriter{Writer: conn}, dispatcher)
+		return s.handleUDPPayload(ctx, sessionPolicy, &PacketReader{Reader: clientReader}, &PacketWriter{Writer: streamConn}, dispatcher)
 	}
 
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
@@ -241,7 +249,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	})
 
 	errors.LogInfo(ctx, "received request for ", destination)
-	return s.handleConnection(ctx, sessionPolicy, destination, clientReader, buf.NewWriter(conn), dispatcher)
+	return s.handleConnection(ctx, sessionPolicy, destination, clientReader, buf.NewWriter(streamConn), dispatcher)
 }
 
 func (s *Server) handleUDPPayload(ctx context.Context, sessionPolicy policy.Session, clientReader *PacketReader, clientWriter *PacketWriter, dispatcher routing.Dispatcher) error {

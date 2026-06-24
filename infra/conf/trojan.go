@@ -19,23 +19,25 @@ import (
 
 // TrojanServerTarget is configuration of a single trojan server
 type TrojanServerTarget struct {
-	Address  *Address `json:"address"`
-	Port     uint16   `json:"port"`
-	Level    byte     `json:"level"`
-	Email    string   `json:"email"`
-	Password string   `json:"password"`
-	Flow     string   `json:"flow"`
+	Address    *Address `json:"address"`
+	Port       uint16   `json:"port"`
+	Level      byte     `json:"level"`
+	Email      string   `json:"email"`
+	Password   string   `json:"password"`
+	Flow       string   `json:"flow"`
+	Encryption string   `json:"encryption"`
 }
 
 // TrojanClientConfig is configuration of trojan servers
 type TrojanClientConfig struct {
-	Address  *Address              `json:"address"`
-	Port     uint16                `json:"port"`
-	Level    byte                  `json:"level"`
-	Email    string                `json:"email"`
-	Password string                `json:"password"`
-	Flow     string                `json:"flow"`
-	Servers  []*TrojanServerTarget `json:"servers"`
+	Address    *Address              `json:"address"`
+	Port       uint16                `json:"port"`
+	Level      byte                  `json:"level"`
+	Email      string                `json:"email"`
+	Password   string                `json:"password"`
+	Flow       string                `json:"flow"`
+	Encryption string                `json:"encryption"`
+	Servers    []*TrojanServerTarget `json:"servers"`
 }
 
 // Build implements Buildable
@@ -45,12 +47,13 @@ func (c *TrojanClientConfig) Build() (proto.Message, error) {
 	if c.Address != nil {
 		c.Servers = []*TrojanServerTarget{
 			{
-				Address:  c.Address,
-				Port:     c.Port,
-				Level:    c.Level,
-				Email:    c.Email,
-				Password: c.Password,
-				Flow:     c.Flow,
+				Address:    c.Address,
+				Port:       c.Port,
+				Level:      c.Level,
+				Email:      c.Email,
+				Password:   c.Password,
+				Flow:       c.Flow,
+				Encryption: c.Encryption,
 			},
 		}
 	}
@@ -81,7 +84,8 @@ func (c *TrojanClientConfig) Build() (proto.Message, error) {
 				Level: uint32(rec.Level),
 				Email: rec.Email,
 				Account: serial.ToTypedMessage(&trojan.Account{
-					Password: rec.Password,
+					Password:   rec.Password,
+					Encryption: rec.Encryption,
 				}),
 			},
 		}
@@ -104,10 +108,11 @@ type TrojanInboundFallback struct {
 
 // TrojanUserConfig is user configuration
 type TrojanUserConfig struct {
-	Password string `json:"password"`
-	Level    byte   `json:"level"`
-	Email    string `json:"email"`
-	Flow     string `json:"flow"`
+	Password   string `json:"password"`
+	Level      byte   `json:"level"`
+	Email      string `json:"email"`
+	Flow       string `json:"flow"`
+	Encryption string `json:"encryption"`
 }
 
 // TrojanServerConfig is Inbound configuration
@@ -139,7 +144,8 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 			Level: uint32(rawUser.Level),
 			Email: rawUser.Email,
 			Account: serial.ToTypedMessage(&trojan.Account{
-				Password: rawUser.Password,
+				Password:   rawUser.Password,
+				Encryption: rawUser.Encryption,
 			}),
 		}
 		return nil

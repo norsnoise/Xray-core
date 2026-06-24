@@ -85,6 +85,13 @@ func (a *Account) getCipher() (Cipher, error) {
 			IVBytes:         32,
 			AEADAuthCreator: createXChaCha20Poly1305,
 		}, nil
+	case CipherType_WAES_256_GCM:
+		// Cascade: data is encrypted with AES-256-GCM first, then WAES-256.
+		return &AEADCipher{
+			KeyBytes:        32,
+			IVBytes:         32,
+			AEADAuthCreator: createAes256ThenWaes256,
+		}, nil
 	case CipherType_NONE:
 		return NoneCipher{}, nil
 	default:

@@ -2,7 +2,6 @@ package encryption
 
 import (
 	"bytes"
-	"crypto/aes"
 	"crypto/cipher"
 	"fmt"
 	"io"
@@ -13,8 +12,8 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common/crypto"
+	"github.com/xtls/xray-core/common/crypto/waes256"
 	"github.com/xtls/xray-core/common/errors"
-	"golang.org/x/crypto/chacha20poly1305"
 	"lukechampine.com/blake3"
 )
 
@@ -157,13 +156,12 @@ type AEAD struct {
 func NewAEAD(ctx, key []byte, useAES bool) *AEAD {
 	k := make([]byte, 32)
 	blake3.DeriveKey(k, string(ctx), key)
-	var aead cipher.AEAD
-	if useAES {
-		block, _ := aes.NewCipher(k)
-		aead, _ = cipher.NewGCM(block)
-	} else {
-		aead, _ = chacha20poly1305.New(k)
-	}
+	// Experimental: encrypt VLESS records with the AES-256-CTR + WAES-256
+	// cascade, i.e. WAES-256(AES-256-CTR(data)). Same 32-byte key / 12-byte
+	// nonce / 16-byte tag contract as the AES-GCM and ChaCha20-Poly1305 it
+	// replaces, so the record framing is unchanged. useAES is ignored. Not
+	// wire-compatible with stock VLESS encryption.
+	aead, _ := waes256.NewCascadeAEAD(k)
 	return &AEAD{AEAD: aead}
 }
 

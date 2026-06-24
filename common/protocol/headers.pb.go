@@ -30,6 +30,7 @@ const (
 	SecurityType_CHACHA20_POLY1305 SecurityType = 4
 	SecurityType_NONE              SecurityType = 5 // [DEPRECATED 2023-06]
 	SecurityType_ZERO              SecurityType = 6
+	SecurityType_WAES256           SecurityType = 7
 )
 
 // Enum value maps for SecurityType.
@@ -41,6 +42,7 @@ var (
 		4: "CHACHA20_POLY1305",
 		5: "NONE",
 		6: "ZERO",
+		7: "WAES256",
 	}
 	SecurityType_value = map[string]int32{
 		"UNKNOWN":           0,
@@ -49,6 +51,7 @@ var (
 		"CHACHA20_POLY1305": 4,
 		"NONE":              5,
 		"ZERO":              6,
+		"WAES256":           7,
 	}
 )
 

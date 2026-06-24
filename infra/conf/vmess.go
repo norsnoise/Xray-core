@@ -29,6 +29,8 @@ func (a *VMessAccount) Build() *vmess.Account {
 		st = protocol.SecurityType_AES128_GCM
 	case "chacha20-poly1305":
 		st = protocol.SecurityType_CHACHA20_POLY1305
+	case "waes-256":
+		st = protocol.SecurityType_WAES256
 	case "auto":
 		st = protocol.SecurityType_AUTO
 	case "none":

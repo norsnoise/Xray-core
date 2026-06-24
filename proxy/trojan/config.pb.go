@@ -25,6 +25,7 @@ const (
 type Account struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Password      string                 `protobuf:"bytes,1,opt,name=password,proto3" json:"password,omitempty"`
+	Encryption    string                 `protobuf:"bytes,2,opt,name=encryption,proto3" json:"encryption,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -62,6 +63,13 @@ func (*Account) Descriptor() ([]byte, []int) {
 func (x *Account) GetPassword() string {
 	if x != nil {
 		return x.Password
+	}
+	return ""
+}
+
+func (x *Account) GetEncryption() string {
+	if x != nil {
+		return x.Encryption
 	}
 	return ""
 }
@@ -250,9 +258,10 @@ var File_proxy_trojan_config_proto protoreflect.FileDescriptor
 
 const file_proxy_trojan_config_proto_rawDesc = "" +
 	"\n" +
-	"\x19proxy/trojan/config.proto\x12\x11xray.proxy.trojan\x1a\x1acommon/protocol/user.proto\x1a!common/protocol/server_spec.proto\"%\n" +
+	"\x19proxy/trojan/config.proto\x12\x11xray.proxy.trojan\x1a\x1acommon/protocol/user.proto\x1a!common/protocol/server_spec.proto\"E\n" +
 	"\aAccount\x12\x1a\n" +
-	"\bpassword\x18\x01 \x01(\tR\bpassword\"\x82\x01\n" +
+	"\bpassword\x18\x01 \x01(\tR\bpassword\x12\x1e\n" +
+	"\nencryption\x18\x02 \x01(\tR\nencryption\"\x82\x01\n" +
 	"\bFallback\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04alpn\x18\x02 \x01(\tR\x04alpn\x12\x12\n" +

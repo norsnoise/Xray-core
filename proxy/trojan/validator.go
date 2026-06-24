@@ -71,6 +71,19 @@ func (v *Validator) GetAll() []*protocol.MemoryUser {
 	return u
 }
 
+// EncryptionCandidates returns the passwords of all users (with or without an
+// email) that enabled the experimental "waes-256" inner encryption.
+func (v *Validator) EncryptionCandidates() []string {
+	var out []string
+	v.users.Range(func(_, value interface{}) bool {
+		if acc, ok := value.(*protocol.MemoryUser).Account.(*MemoryAccount); ok && acc.Encryption == "waes-256" {
+			out = append(out, acc.Password)
+		}
+		return true
+	})
+	return out
+}
+
 // Get users count
 func (v *Validator) GetCount() int64 {
 	var c int64 = 0

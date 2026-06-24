@@ -24,6 +24,8 @@ enum CipherType {
   CHACHA20_POLY1305 = 7;
   XCHACHA20_POLY1305 = 8;
   NONE = 9;
+  // Experimental wide-block AES variant (WAES-256-CTR + HMAC-SHA256). Study only.
+  WAES_256_GCM = 10;
 }
 
 message ServerConfig {

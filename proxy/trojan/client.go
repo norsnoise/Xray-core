@@ -81,6 +81,12 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		return errors.New("user account is not valid")
 	}
 
+	// Experimental opt-in WAES-256 cascade inner layer.
+	streamConn := net.Conn(conn)
+	if account.Encryption == "waes-256" {
+		streamConn = NewClientCryptoConn(conn, account.Password)
+	}
+
 	var newCtx context.Context
 	var newCancel context.CancelFunc
 	if session.TimeoutOnlyFromContext(ctx) {
@@ -99,7 +105,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	postRequest := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 
-		bufferWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
+		bufferWriter := buf.NewBufferedWriter(buf.NewWriter(streamConn))
 
 		connWriter := &ConnWriter{
 			Writer:  bufferWriter,
@@ -142,10 +148,10 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		var reader buf.Reader
 		if network == net.Network_UDP {
 			reader = &PacketReader{
-				Reader: conn,
+				Reader: streamConn,
 			}
 		} else {
-			reader = buf.NewReader(conn)
+			reader = buf.NewReader(streamConn)
 		}
 		return buf.Copy(reader, link.Writer, buf.UpdateActivity(timer))
 	}
