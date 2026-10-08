@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/antireplay"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
@@ -39,6 +40,7 @@ type Server struct {
 	validator     *Validator
 	fallbacks     map[string]map[string]map[string]*Fallback // or nil
 	cone          bool
+	waesSalts     *antireplay.ReplayFilter[[waesSaltLen]byte]
 }
 
 // NewServer creates a new trojan inbound handler.
@@ -60,6 +62,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		validator:     validator,
 		cone:          ctx.Value("cone").(bool),
+		waesSalts:     NewSaltFilter(),
 	}
 
 	if config.Fallbacks != nil {
@@ -154,7 +157,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	// fallbacks (a non-matching client is dropped, not forwarded to a decoy).
 	streamConn := net.Conn(conn)
 	if waesCandidates := s.validator.EncryptionCandidates(); len(waesCandidates) > 0 {
-		streamConn = NewServerCryptoConn(conn, waesCandidates)
+		streamConn = NewServerCryptoConn(conn, waesCandidates, s.waesSalts)
 	}
 
 	sessionPolicy := s.policyManager.ForLevel(0)

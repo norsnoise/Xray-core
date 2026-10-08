@@ -240,7 +240,9 @@ Trojan is TLS-only and has no native cipher, so the cascade is an **opt-in
 inner layer** enabled by the `encryption` account field (default off). Set
 `"encryption": "waes-256"` on **both** ends; same password. Production Trojan
 also needs a TLS/REALITY transport — omitted here for a minimal example.
-(Encryption does not combine with Trojan `fallbacks`.)
+(Encryption does not combine with Trojan `fallbacks`.) Client and server
+clocks must agree within 90 seconds: the client's first record carries its
+time, and the server rejects stale or replayed connections.
 
 **Server** (`server.json`):
 
