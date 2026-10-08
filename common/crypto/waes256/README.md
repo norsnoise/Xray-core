@@ -297,10 +297,11 @@ go test ./proxy/shadowsocks/ ./proxy/vless/encryption/ ./proxy/vmess/... ./proxy
 
 | File | Contents |
 |------|----------|
-| `waes256.go` | WAES-256 block cipher (`cipher.Block`) — S-box, ShiftRows, MixColumns, key schedule. |
+| `waes256.go` | WAES-256 block cipher (`cipher.Block`) — S-box, ShiftRows, table-free MixColumns, key schedule. |
 | `aead.go` | `NewAEAD` — WAES-256-CTR + HMAC-SHA256 `cipher.AEAD`. |
 | `cascade.go` | `NewCascadeAEAD` — AES-256-CTR + WAES-256 cascade `cipher.AEAD`. |
 | `waes256_test.go` | Reference vector, round-trip, S-box and AEAD tests. |
+| `reference_test.go` | The original 4×4-state implementation, kept as an oracle; the optimized cipher is checked against it. Benchmarks. |
 
 Consumers of `NewCascadeAEAD`:
 - `proxy/shadowsocks/cascade.go` — the `waes-256-gcm` method.

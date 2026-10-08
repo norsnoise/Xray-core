@@ -94,88 +94,80 @@ func init() {
 	}
 }
 
-type state [nCells][nCells]uint16
+// The state is 16 cells in column-major order, s[col*nCells+row], which is
+// also the order the cells are serialized in, two bytes each, big-endian.
+type state [nCells * nCells]uint16
 
-func bytesToState(b []byte) state {
-	var wd [16]uint16
-	for k := 0; k < 16; k++ {
-		wd[k] = uint16(b[2*k])<<8 | uint16(b[2*k+1])
+func loadState(b []byte) (s state) {
+	for k := range s {
+		s[k] = uint16(b[2*k])<<8 | uint16(b[2*k+1])
 	}
-	var s state
-	for r := 0; r < nCells; r++ {
-		for c := 0; c < nCells; c++ {
-			s[r][c] = wd[c*nCells+r] // column-major
-		}
-	}
-	return s
+	return
 }
 
-func stateToBytes(s state, dst []byte) {
-	i := 0
+func storeState(s *state, dst []byte) {
+	for k, v := range s {
+		dst[2*k] = byte(v >> 8)
+		dst[2*k+1] = byte(v)
+	}
+}
+
+// xtime multiplies by x (i.e. 2) in GF(2^16) without tables or branches.
+func xtime(a uint16) uint16 {
+	return a<<1 ^ (poly & mask & -(a >> (w - 1)))
+}
+
+// subShift applies SubWords then ShiftRows (row r rotated left by r).
+func subShift(s *state, box *[1 << w]uint16) (o state) {
 	for c := 0; c < nCells; c++ {
 		for r := 0; r < nCells; r++ {
-			dst[i] = byte(s[r][c] >> 8)
-			dst[i+1] = byte(s[r][c])
-			i += 2
+			o[c*nCells+r] = box[s[((c+r)%nCells)*nCells+r]]
 		}
 	}
+	return
 }
 
-func subWords(s state, box *[1 << w]uint16) state {
-	for r := 0; r < nCells; r++ {
-		for c := 0; c < nCells; c++ {
-			s[r][c] = box[s[r][c]]
-		}
-	}
-	return s
-}
-
-func shiftRows(s state) state {
-	var o state
-	for r := 0; r < nCells; r++ {
-		for c := 0; c < nCells; c++ {
-			o[r][c] = s[r][(c+r)%nCells] // rotate row r left by r
-		}
-	}
-	return o
-}
-
-func invShiftRows(s state) state {
-	var o state
-	for r := 0; r < nCells; r++ {
-		for c := 0; c < nCells; c++ {
-			o[r][(c+r)%nCells] = s[r][c] // rotate row r right by r
-		}
-	}
-	return o
-}
-
-var (
-	mdsM    = [nCells][nCells]int{{2, 3, 1, 1}, {1, 2, 3, 1}, {1, 1, 2, 3}, {3, 1, 1, 2}}
-	invMdsM = [nCells][nCells]int{{0x0E, 0x0B, 0x0D, 0x09}, {0x09, 0x0E, 0x0B, 0x0D}, {0x0D, 0x09, 0x0E, 0x0B}, {0x0B, 0x0D, 0x09, 0x0E}}
-)
-
-func mixColumns(s state, m *[nCells][nCells]int) state {
-	var o state
+// invShiftSub applies InvShiftRows (row r rotated right by r) then InvSubWords.
+func invShiftSub(s *state, box *[1 << w]uint16) (o state) {
 	for c := 0; c < nCells; c++ {
 		for r := 0; r < nCells; r++ {
-			acc := 0
-			for k := 0; k < nCells; k++ {
-				acc ^= gfMul(m[r][k], int(s[k][c]))
-			}
-			o[r][c] = uint16(acc)
+			o[((c+r)%nCells)*nCells+r] = box[s[c*nCells+r]]
 		}
 	}
-	return o
+	return
 }
 
-func addRoundKey(s, rk state) state {
-	for r := 0; r < nCells; r++ {
-		for c := 0; c < nCells; c++ {
-			s[r][c] ^= rk[r][c]
-		}
+// mixColumns multiplies each column by the circulant (2 3 1 1).
+func mixColumns(s *state) {
+	for c := 0; c < nCells*nCells; c += nCells {
+		a0, a1, a2, a3 := s[c], s[c+1], s[c+2], s[c+3]
+		t := a0 ^ a1 ^ a2 ^ a3
+		s[c] = a0 ^ t ^ xtime(a0^a1)
+		s[c+1] = a1 ^ t ^ xtime(a1^a2)
+		s[c+2] = a2 ^ t ^ xtime(a2^a3)
+		s[c+3] = a3 ^ t ^ xtime(a3^a0)
 	}
-	return s
+}
+
+// invMixColumns multiplies each column by the circulant (0E 0B 0D 09), which
+// factors as (2 3 1 1) * (5 0 4 0). The identity holds over GF(2)[x] with no
+// reduction, so it holds in this field as it does in AES's.
+func invMixColumns(s *state) {
+	for c := 0; c < nCells*nCells; c += nCells {
+		u := xtime(xtime(s[c] ^ s[c+2]))
+		v := xtime(xtime(s[c+1] ^ s[c+3]))
+		s[c] ^= u
+		s[c+1] ^= v
+		s[c+2] ^= u
+		s[c+3] ^= v
+	}
+	mixColumns(s)
+}
+
+func addRoundKey(s, rk *state) {
+	for k := range s {
+		s[k] ^= rk[k]
+	}
 }
 
 // Cipher implements crypto/cipher.Block with a 32-byte block.
@@ -211,10 +203,8 @@ func NewCipher(key []byte) (*Cipher, error) {
 		}
 	}
 	for r := 0; r <= rounds; r++ {
-		for row := 0; row < nCells; row++ {
-			for col := 0; col < nCells; col++ {
-				c.rks[r][row][col] = words[4*r+col][row]
-			}
+		for col := 0; col < nCells; col++ {
+			copy(c.rks[r][col*nCells:], words[4*r+col][:])
 		}
 	}
 	return c, nil
@@ -223,24 +213,29 @@ func NewCipher(key []byte) (*Cipher, error) {
 func (c *Cipher) BlockSize() int { return BlockSize }
 
 func (c *Cipher) Encrypt(dst, src []byte) {
-	s := addRoundKey(bytesToState(src), c.rks[0])
+	s := loadState(src)
+	addRoundKey(&s, &c.rks[0])
 	for r := 1; r < rounds; r++ {
-		s = addRoundKey(mixColumns(shiftRows(subWords(s, &sbox)), &mdsM), c.rks[r])
+		s = subShift(&s, &sbox)
+		mixColumns(&s)
+		addRoundKey(&s, &c.rks[r])
 	}
-	s = shiftRows(subWords(s, &sbox)) // final round: no MixColumns
-	s = addRoundKey(s, c.rks[rounds])
-	stateToBytes(s, dst)
+	s = subShift(&s, &sbox) // final round: no MixColumns
+	addRoundKey(&s, &c.rks[rounds])
+	storeState(&s, dst)
 }
 
 func (c *Cipher) Decrypt(dst, src []byte) {
-	s := addRoundKey(bytesToState(src), c.rks[rounds])
-	s = subWords(invShiftRows(s), &invBox)
+	s := loadState(src)
+	addRoundKey(&s, &c.rks[rounds])
+	s = invShiftSub(&s, &invBox)
 	for r := rounds - 1; r > 0; r-- {
-		s = mixColumns(addRoundKey(s, c.rks[r]), &invMdsM)
-		s = subWords(invShiftRows(s), &invBox)
+		addRoundKey(&s, &c.rks[r])
+		invMixColumns(&s)
+		s = invShiftSub(&s, &invBox)
 	}
-	s = addRoundKey(s, c.rks[0])
-	stateToBytes(s, dst)
+	addRoundKey(&s, &c.rks[0])
+	storeState(&s, dst)
 }
 
 var _ cipher.Block = (*Cipher)(nil)
